@@ -33,11 +33,10 @@ def create_app(test_config=None):
         print("Hello, World on BACKEND!")
         return json.dumps({"message": "Hello, World!"})
 
-    # @app.route('/gpt4')
-    # def gpt4():
-    #     embeddings_path = "https://cdn.openai.com/API/examples/data/winter_olympics_2022.csv"
-    #     df = pd.read_csv(embeddings_path)
-    #     df['embedding'] = df['embedding'].apply(ast.literal_eval)
+    @app.route('/ask')
+    def gpt4():
+        print("Starting gpt client")
+        
 
 
     
