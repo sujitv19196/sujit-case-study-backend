@@ -11,12 +11,14 @@ import time
 import string
 
 class GPTQueryGen:
-    def __init__(self, db_name: str, model, embeddings: str, token_budget: int = 4096):
+    def __init__(self, model, embeddings: str, db_name=None, db_instance=None, token_budget: int = 4096):
         self.model = model
         self.token_budget = token_budget
-        self.db_name = db_name 
         self.embeddings = embeddings
-        self.db = self.load_faiss()
+        if db_instance is None:
+            self.db = self.load_faiss(db_name)
+        else:
+            self.db = db_instance
         self.client = self.load_openai_client()
 
     def num_tokens(self, text: str) -> int:
@@ -48,7 +50,7 @@ class GPTQueryGen:
         print(f"Tokens Used: {tokens_used}")
         return message + question
 
-    def load_faiss(self):
+    def load_faiss(self, db_name):
         embeddings = None
         if self.embeddings == "hf":
             embeddings_model_name = "sentence-transformers/all-MiniLM-L6-v2"
@@ -58,7 +60,7 @@ class GPTQueryGen:
         elif self.embeddings == "openai":
             embeddings = OpenAIEmbeddings(model="text-embedding-ada-002")
         
-        db = FAISS.load_local(self.db_name, embeddings, allow_dangerous_deserialization=True)
+        db = FAISS.load_local(db_name, embeddings, allow_dangerous_deserialization=True)
         return db 
 
     def query_faiss(self, query: str) -> list:

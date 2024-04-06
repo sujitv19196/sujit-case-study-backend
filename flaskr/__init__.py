@@ -1,8 +1,12 @@
 import os
 import json
 
-from flask import Flask
+from flask import Flask, request
 from flask_cors import CORS, cross_origin
+
+from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_community.vectorstores import FAISS
+from scripts.gpt4querygen import GPTQueryGen
 
 def create_app(test_config=None):
     # create and configure the app
@@ -27,17 +31,32 @@ def create_app(test_config=None):
     except OSError:
         pass
 
+    # init vector db 
+    db = load_faiss("../faiss/faiss_index_hf_v6") # TODO make arg? 
+    
     # a simple page that says hello
     @app.route('/hello', methods=['GET'])
     def hello():
         print("Hello, World on BACKEND!")
         return json.dumps({"message": "Hello, World!"})
 
-    @app.route('/ask')
-    def gpt4():
-        print("Starting gpt client")
+    @app.route('/ask', methods=['POST'])
+    def ask():
+        query = request.form.get('query')
+
+        gpt4 = GPTQueryGen(model="gpt-3.5-turbo", embeddings = "hf", db_instance=db, token_budget=4096)
+        response = gpt4.ask(query, print_message=False)
+        print(response)
+        return json.dumps({"message": response})
         
-
-
-    
     return app
+
+def load_faiss(db_name):
+    embeddings = None
+    embeddings_model_name = "sentence-transformers/all-MiniLM-L6-v2"
+    model_kwargs = {'device': 'mps'}
+    encode_kwargs = {'batch_size': 8}
+    embeddings = HuggingFaceEmbeddings(model_name=embeddings_model_name, model_kwargs=model_kwargs, encode_kwargs=encode_kwargs)
+
+    db = FAISS.load_local(db_name, embeddings, allow_dangerous_deserialization=True)
+    return db 

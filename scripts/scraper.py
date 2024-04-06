@@ -2,7 +2,7 @@ import csv
 import re
 import scrapy
 from scrapy.crawler import CrawlerProcess
-from w3lib.html import remove_tags, remove_tags_with_content 
+from w3lib.html import remove_tags_with_content 
 import sys
 class MySpider(scrapy.Spider):
     name = "my_spider"
@@ -61,6 +61,7 @@ class MySpider(scrapy.Spider):
                 part_num = word.strip()
         
         return part_num
+    
     async def find_part_select_num(self, url):
         # Regular expression to match "PS" followed by digits
         pattern = r'PS\d+'
