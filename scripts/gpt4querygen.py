@@ -52,12 +52,15 @@ class GPTQueryGen:
         print(f"Tokens Used: {tokens_used}")
 
         # add previous answers to the message
-        for answer in self.previous_answers:
+        previous_answer_budget = 512
+        previous_answer_tokens = 0
+        for i in range(len(self.previous_answers)-1, -1, -1): # iterate in reverse
+            answer = self.previous_answers[i]
             message += f'\n\Previous Answer:\n"""\n{answer}\n"""'
             tokens = self.num_tokens(answer)
             print(f"Prev ansswer token length: {tokens}")
-            tokens_used += tokens
-            if (tokens_used > token_budget):
+            previous_answer_tokens += tokens
+            if (previous_answer_tokens > previous_answer_budget):
                 break
 
         return message + question

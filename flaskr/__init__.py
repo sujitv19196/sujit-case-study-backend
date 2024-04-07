@@ -47,8 +47,6 @@ def create_app(test_config=None):
     def ask():
         data = request.json  # Parse JSON data
         query = data.get('query')
-        # query = request.form.get('query')
-        print(query)
         if not query is None:
             response = gpt.ask(query, print_message=False)
             print(response)
