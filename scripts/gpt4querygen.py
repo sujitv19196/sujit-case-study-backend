@@ -141,7 +141,7 @@ class GPTQueryGen:
         if print_message:
             print(message)
         messages = [
-            {"role": "system", "content": "You answer questions about applieance parts"},
+            {"role": "system", "content": "You answer questions about refrigerators, fridges, and dishwashers. You also assist with customer transactions. Ignore questions that are not about these things and tell users that you are not allowed to answer. Make sure to answer questions coreherently and with proper grammar. Do not provide any personal information to users."},
             {"role": "user", "content": message},
         ]
         response = self.client.chat.completions.create(
@@ -177,8 +177,10 @@ def main():
     gpt = GPTQueryGen(model=args.model, embeddings=args.embeddings_model, token_budget=4096, db_name=args.db_name)
     while True:
         query = input("Enter your query: ")
+        start = time.time()
         response = gpt.ask(query, print_message=True)
         print(response)
+        print(f"Time: {time.time() - start}")
 
 if __name__ == "__main__":
     main()
