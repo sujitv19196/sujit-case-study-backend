@@ -85,7 +85,8 @@ class CSVPipeline:
 
 def run_spider():
     process = CrawlerProcess(settings={
-        'DEPTH_LIMIT': 5,
+        'DEPTH_LIMIT': 8,
+        'DEPTH_PRIORITY': 2,
         'LOG_LEVEL': 'INFO',
         'ITEM_PIPELINES': {'__main__.CSVPipeline': 100}
     })

@@ -20,6 +20,7 @@ class GPTQueryGen:
         else:
             self.db = db_instance
         self.client = self.load_openai_client()
+        self.previous_answers = []
 
     def num_tokens(self, text: str) -> int:
         """Return the number of tokens in a string."""
@@ -28,8 +29,9 @@ class GPTQueryGen:
 
     def query_message(self, query: str, token_budget: int) -> str:
         """Return a message for GPT, with relevant source texts queried from local FAISS db."""
+        print(query)
         strings = self.query_faiss(query)
-        introduction = 'Use the below website pages from PartSelect.com to answer the subsequent question. ALWAYS link to relevant sources. If the answer cannot be found in the articles, try and use the info provided but mention that "I could not find a direct answer."'
+        introduction = 'Use the below website pages from PartSelect.com and previous answers you have given to answer the subsequent question. ALWAYS link to relevant sources. If the answer cannot be found in the articles, try and use the info provided but mention that "I could not find a direct answer."'
         question = f"\n\nQuestion: {query}"
         message = introduction
 
@@ -48,6 +50,16 @@ class GPTQueryGen:
             if (tokens_used > token_budget):
                 break
         print(f"Tokens Used: {tokens_used}")
+
+        # add previous answers to the message
+        for answer in self.previous_answers:
+            message += f'\n\Previous Answer:\n"""\n{answer}\n"""'
+            tokens = self.num_tokens(answer)
+            print(f"Prev ansswer token length: {tokens}")
+            tokens_used += tokens
+            if (tokens_used > token_budget):
+                break
+
         return message + question
 
     def load_faiss(self, db_name):
@@ -135,6 +147,7 @@ class GPTQueryGen:
             temperature=0
         )
         response_message = response.choices[0].message.content
+        self.previous_answers.append(response_message)
         return response_message
 
     def load_openai_client(self):
@@ -145,7 +158,6 @@ class GPTQueryGen:
 def main():
     parser = argparse.ArgumentParser(description="GPT Query Generator CLI")
     parser.add_argument("--db-name", type=str, help="Name of the database")
-    parser.add_argument("--query", type=str, help="Query to ask GPT")
     parser.add_argument("--embeddings-model", type=str, help="Embeddings model to use")
     parser.add_argument("--model", type=str, help="GPT model to use", default="gpt-3.5-turbo")
     args = parser.parse_args()
@@ -153,21 +165,17 @@ def main():
     if not args.db_name:
         print("Please provide a value for --db-name")
         return
-
-    if not args.query:
-        print("Please provide a value for --query")
-        return
     
     if not args.embeddings_model:
         print("Please provide a value for --embeddings-model")
         return
 
-    start = time.time()
-    gpt4 = GPTQueryGen(model=args.model, embeddings = args.embeddings_model, token_budget=4096, db_name=args.db_name)
-    response = gpt4.ask(args.query, print_message=True)
-    print(response)
-    print(f"Time taken: {time.time() - start} seconds")
-    exit(0)
+    print("Loading...")
+    gpt = GPTQueryGen(model=args.model, embeddings=args.embeddings_model, token_budget=4096, db_name=args.db_name)
+    while True:
+        query = input("Enter your query: ")
+        response = gpt.ask(query, print_message=True)
+        print(response)
 
 if __name__ == "__main__":
     main()
