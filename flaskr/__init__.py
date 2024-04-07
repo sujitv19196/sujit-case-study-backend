@@ -4,9 +4,9 @@ import json
 from flask import Flask, request
 from flask_cors import CORS, cross_origin
 
-from .gpt4querygen import GPTQueryGen
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
+from scripts.gpt4querygen import GPTQueryGen
 
 def create_app(test_config=None):
     # create and configure the app
@@ -35,7 +35,7 @@ def create_app(test_config=None):
     # db = load_faiss("../faiss/faiss_index_hf_v6") # TODO make arg? 
    
     # init gpt model 
-    gpt = GPTQueryGen(model="gpt-3.5-turbo", embeddings = "hf", db_name="./faiss_index", token_budget=4096)
+    gpt = GPTQueryGen(model="gpt-3.5-turbo", embeddings = "hf", db_name="./faiss_index", token_budget=8192)
 
     # a simple page that says hello!
     @app.route('/hello', methods=['GET'])

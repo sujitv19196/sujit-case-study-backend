@@ -21,6 +21,7 @@ class GPTQueryGen:
             self.db = db_instance
         self.client = self.load_openai_client()
         self.previous_answers = []
+        self.previous_db_results = []
 
     def num_tokens(self, text: str) -> int:
         """Return the number of tokens in a string."""
@@ -28,16 +29,17 @@ class GPTQueryGen:
         return len(encoding.encode(text))
 
     def query_message(self, query: str, token_budget: int) -> str:
-        """Return a message for GPT, with relevant source texts queried from local FAISS db."""
-        print(query)
+        """Return a message for GPT, with relevant source texts queried from local FAISS db."""        
         strings = self.query_faiss(query)
         introduction = 'Use the below website pages from PartSelect.com and previous answers you have given to answer the subsequent question. ALWAYS link to relevant sources. If the answer cannot be found in the articles, try and use the info provided but mention that "I could not find a direct answer."'
         question = f"\n\nQuestion: {query}"
         message = introduction
-
+        
         # Add each string to the message until the token budget is reached. Alwats uses at least one string.
         tokens_used = 0
         tokens_used += self.num_tokens(message + question)
+        previous_answer_budget = 1024
+        previous_db_output_budget = 1024
         print(f"Number of Results: {len(strings)}")
         if len(strings) == 0:
             return None
@@ -47,20 +49,35 @@ class GPTQueryGen:
             tokens = self.num_tokens(next_article)
             tokens_used += tokens
             print(f"Article token length: {tokens}")
-            if (tokens_used > token_budget):
+            if (tokens_used > token_budget-previous_answer_budget-previous_db_output_budget):
                 break
         print(f"Tokens Used: {tokens_used}")
 
-        # add previous answers to the message
-        previous_answer_budget = 512
-        previous_answer_tokens = 0
+        # use 1 previous article from every previous query until run out of tokens or articles
+        for i in range(len(self.previous_db_results)-1, -1, -1): # iterate in reverse
+            docs = self.previous_db_results[i]
+            if docs:
+                 doc = docs[0:2] 
+            else: 
+                continue
+            for d in doc:
+                next_article = f'\n\PartSelect Webpage:\n"""\n{d}\n"""'
+                message += next_article
+                tokens = self.num_tokens(next_article)
+                tokens_used += tokens
+                print(f"Previous Article token length: {tokens}")
+                if (tokens_used > token_budget-previous_answer_budget):
+                    break
+
+        # add previous GPT answers to the message
+        
         for i in range(len(self.previous_answers)-1, -1, -1): # iterate in reverse
             answer = self.previous_answers[i]
             message += f'\n\Previous Answer:\n"""\n{answer}\n"""'
             tokens = self.num_tokens(answer)
             print(f"Prev ansswer token length: {tokens}")
-            previous_answer_tokens += tokens
-            if (previous_answer_tokens > previous_answer_budget):
+            tokens_used += tokens
+            if (tokens_used > token_budget):
                 break
 
         return message + question
@@ -104,6 +121,7 @@ class GPTQueryGen:
                 k=20, fetch_k=60000)
         else: 
             docs = self.db.similarity_search_with_score(query, k=20)
+        self.previous_db_results.append(docs)
         return docs
     
     def find_model_num(self, title):
@@ -141,7 +159,7 @@ class GPTQueryGen:
         if print_message:
             print(message)
         messages = [
-            {"role": "system", "content": "You answer questions about refrigerators, fridges, and dishwashers. You also assist with customer transactions. Ignore questions that are not about these things and tell users that you are not allowed to answer. Make sure to answer questions coreherently and with proper grammar. Do not provide any personal information to users."},
+            {"role": "system", "content": "You answer questions about appliances."},
             {"role": "user", "content": message},
         ]
         response = self.client.chat.completions.create(
@@ -151,6 +169,7 @@ class GPTQueryGen:
         )
         response_message = response.choices[0].message.content
         self.previous_answers.append(response_message)
+        self.previous_db_results.append(query)
         return response_message
 
     def load_openai_client(self):
