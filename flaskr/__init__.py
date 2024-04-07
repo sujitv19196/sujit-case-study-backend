@@ -11,7 +11,7 @@ from scripts.gpt4querygen import GPTQueryGen
 def create_app(test_config=None):
     # create and configure the app
     app = Flask(__name__, instance_relative_config=True)
-    cors = CORS(app)
+    CORS(app)
     app.config.from_mapping(
         SECRET_KEY='dev',
         # DATABASE=os.path.join(app.instance_path, 'flaskr.sqlite'),
@@ -32,9 +32,12 @@ def create_app(test_config=None):
         pass
 
     # init vector db 
-    db = load_faiss("../faiss/faiss_index_hf_v6") # TODO make arg? 
-    
-    # a simple page that says hello
+    # db = load_faiss("../faiss/faiss_index_hf_v6") # TODO make arg? 
+   
+    # init gpt model 
+    gpt = GPTQueryGen(model="gpt-3.5-turbo", embeddings = "hf", db_name="faiss/faiss_index_hf_v7_10d", token_budget=4096)
+
+    # a simple page that says hello!
     @app.route('/hello', methods=['GET'])
     def hello():
         print("Hello, World on BACKEND!")
@@ -42,13 +45,15 @@ def create_app(test_config=None):
 
     @app.route('/ask', methods=['POST'])
     def ask():
-        query = request.form.get('query')
-
-        gpt4 = GPTQueryGen(model="gpt-3.5-turbo", embeddings = "hf", db_instance=db, token_budget=4096)
-        response = gpt4.ask(query, print_message=False)
-        print(response)
-        return json.dumps({"message": response})
-        
+        data = request.json  # Parse JSON data
+        query = data.get('query')
+        # query = request.form.get('query')
+        print(query)
+        if not query is None:
+            response = gpt.ask(query, print_message=False)
+            print(response)
+            return json.dumps({"message": response})
+            
     return app
 
 def load_faiss(db_name):
