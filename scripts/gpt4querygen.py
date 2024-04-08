@@ -31,6 +31,7 @@ class GPTQueryGen:
     def query_message(self, query: str, token_budget: int) -> str:
         """Return a message for GPT, with relevant source texts queried from local FAISS db."""        
         strings = self.query_faiss(query)
+        
         introduction = 'Use the below website pages from PartSelect.com and previous answers you have given to answer the subsequent question. ALWAYS link to relevant sources. If the answer cannot be found in the articles, try and use the info provided but mention that "I could not find a direct answer."'
         question = f"\n\nQuestion: {query}"
         message = introduction
@@ -53,8 +54,8 @@ class GPTQueryGen:
                 break
         print(f"Tokens Used: {tokens_used}")
 
-        # use 1 previous article from every previous query until run out of tokens or articles
-        for i in range(len(self.previous_db_results)-1, -1, -1): # iterate in reverse
+        # use top 2 previous article from every previous query until run out of tokens or articles
+        for i in range(len(self.previous_db_results)-2, -1, -1): # iterate in reverse, skip itself 
             docs = self.previous_db_results[i]
             if docs:
                  doc = docs[0:2] 
@@ -70,7 +71,6 @@ class GPTQueryGen:
                     break
 
         # add previous GPT answers to the message
-        
         for i in range(len(self.previous_answers)-1, -1, -1): # iterate in reverse
             answer = self.previous_answers[i]
             message += f'\n\Previous Answer:\n"""\n{answer}\n"""'
@@ -79,9 +79,9 @@ class GPTQueryGen:
             tokens_used += tokens
             if (tokens_used > token_budget):
                 break
-
         return message + question
 
+    # load the faiss db from file
     def load_faiss(self, db_name):
         embeddings = None
         if self.embeddings == "hf":
@@ -148,16 +148,18 @@ class GPTQueryGen:
             return match.group(0)  # Return the matched part select number
         else:
             return "N/A"
+    
     def ask(self,
         query: str,
         print_message: bool = False,    
     ) -> str:
-        """Answers a query using GPT and a dataframe of relevant texts and embeddings."""
+        """Answers a query using GPT"""
         message = self.query_message(query, self.token_budget)
         if message is None:
             return "I could not find a direct answer."
         if print_message:
             print(message)
+
         messages = [
             {"role": "system", "content": "You answer questions about appliances."},
             {"role": "user", "content": message},
@@ -169,7 +171,6 @@ class GPTQueryGen:
         )
         response_message = response.choices[0].message.content
         self.previous_answers.append(response_message)
-        self.previous_db_results.append(query)
         return response_message
 
     def load_openai_client(self):
@@ -177,11 +178,13 @@ class GPTQueryGen:
         client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
         return client
 
+# CLI
 def main():
     parser = argparse.ArgumentParser(description="GPT Query Generator CLI")
     parser.add_argument("--db-name", type=str, help="Name of the database")
     parser.add_argument("--embeddings-model", type=str, help="Embeddings model to use")
     parser.add_argument("--model", type=str, help="GPT model to use", default="gpt-3.5-turbo")
+    parser.add_argument("--token-budget", type=int, help="Token budget for GPT", default=4096)
     args = parser.parse_args()
 
     if not args.db_name:
@@ -193,11 +196,11 @@ def main():
         return
 
     print("Loading...")
-    gpt = GPTQueryGen(model=args.model, embeddings=args.embeddings_model, token_budget=4096, db_name=args.db_name)
+    gpt = GPTQueryGen(model=args.model, embeddings=args.embeddings_model, token_budget=args.token_budget, db_name=args.db_name)
     while True:
         query = input("Enter your query: ")
         start = time.time()
-        response = gpt.ask(query, print_message=True)
+        response = gpt.ask(query, print_message=False)
         print(response)
         print(f"Time: {time.time() - start}")
 

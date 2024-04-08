@@ -4,6 +4,8 @@ import scrapy
 from scrapy.crawler import CrawlerProcess
 from w3lib.html import remove_tags_with_content 
 import sys
+
+# Scraper for PartSelect website to extract text ONLY from fridge and dishwasher parts pages
 class MySpider(scrapy.Spider):
     name = "my_spider"
     start_urls = ['https://www.partselect.com/Dishwasher-Parts.htm', 'https://www.partselect.com/Refrigerator-Parts.htm']

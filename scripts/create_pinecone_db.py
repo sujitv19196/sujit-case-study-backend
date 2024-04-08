@@ -11,7 +11,15 @@ from langchain_text_splitters import CharacterTextSplitter
 
 def upload_to_pinecone(db_name: str, data_file: str):
     # Initialize Pinecone client
-    pinecone_api_key = os.getenv("PINECONE_API_KEY")
+    print("Initializing Pinecone client...")
+    pinecone.init(api_key=os.getenv("PINECONE_API_KEY"), environment='gcp-starter')
+
+    if db_name not in pinecone.list_indexes():
+        print("Creating Pinecone index...")
+        pinecone.create_index(db_name, dimension=1536)
+
+    print("Uploading documents and embeddings to Pinecone...")
+    index = pinecone.Index(db_name)
 
     print("Loading CSV...")
     csv.field_size_limit(sys.maxsize)
@@ -26,20 +34,18 @@ def upload_to_pinecone(db_name: str, data_file: str):
     print("Splitting documents...")
     text_splitter = CharacterTextSplitter(separator=' ', chunk_size=1000, chunk_overlap=200)
     docs = text_splitter.split_documents(documents)
-    
     print("Creating embeddings...")    
-    embeddings = generate_embedding(docs)  # Function to generate embedding
-
-    print("Uploading documents and embeddings to Pinecone...")
-    index = pinecone.Index(db_name)
+    embeddings = generate_embedding([doc.page_content for doc in docs])  # Function to generate embedding
 
     # Upload documents and embeddings in batches
     batch_size = 1000
     total_documents = len(documents)
     for i in range(0, total_documents, batch_size):
         batch_documents = documents[i:i+batch_size]
+        ids = [doc.metadata['url'] for doc in batch_documents]
         batch_embeddings = embeddings[i:i+batch_size]
-        index.upsert(items=batch_documents, vectors=batch_embeddings)
+        index.upsert(id=ids, vectors=batch_embeddings)
+        # casandra.upload_documents(batch_documents) TODO 
         print(f"Uploaded {min(i+batch_size, total_documents)} / {total_documents} documents")
 
     print("Upload complete.")

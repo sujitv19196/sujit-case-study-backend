@@ -4,6 +4,7 @@ import scrapy
 from scrapy.crawler import CrawlerProcess
 from w3lib.html import remove_tags_with_content 
 import sys
+
 class MySpider(scrapy.Spider):
     name = "my_spider"
     start_urls = ['https://www.partselect.com/']
@@ -41,10 +42,13 @@ class MySpider(scrapy.Spider):
         title = response.css('title::text').get()
         model_num = await self.find_model_num(title)
         ps_num = await self.find_part_select_num(response.url)
+        # Add the text, URL, depth, title, model number, and part select number to the CSV file
         yield {'text': text.strip(), 'url': response.url, 'depth': response.meta["depth"], 'title': title, 'model_num': model_num, 'ps_num': ps_num}
+        # Recursively follow links on the page
         for link in response_selector.css('a::attr(href)').extract():
             if (link != "/ShoppingCart.aspx"):
                 absolute_url = response.urljoin(link)
+                # ensure the URL is on the PartSelect website and has not been visited yet
                 if absolute_url.startswith('https://www.partselect.com/') and absolute_url not in self.visited_urls:
                     yield scrapy.Request(absolute_url, callback=self.parse)
     
