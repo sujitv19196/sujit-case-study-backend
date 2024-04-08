@@ -121,6 +121,11 @@ class GPTQueryGen:
                 k=20, fetch_k=60000)
         else: 
             docs = self.db.similarity_search_with_score(query, k=20)
+        
+        # fallback for when ro results from filtered results 
+        if len(docs) == 0:
+            docs = self.db.similarity_search_with_score(query, k=20)
+        
         self.previous_db_results.append(docs)
         return docs
     
