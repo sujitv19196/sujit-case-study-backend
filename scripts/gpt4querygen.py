@@ -9,9 +9,11 @@ import re
 import os
 import time
 import string
+import sys 
+import signal
 
 class GPTQueryGen:
-    def __init__(self, model, embeddings: str, db_name=None, db_instance=None, token_budget: int = 4096):
+    def __init__(self, model, embeddings: str, db_name=None, db_instance=None, token_budget: int = 4096, debug=False):
         self.model = model
         self.token_budget = token_budget
         self.embeddings = embeddings
@@ -22,16 +24,48 @@ class GPTQueryGen:
         self.client = self.load_openai_client()
         self.previous_answers = []
         self.previous_db_results = []
+        # debug 
+        self.debug = debug
+        self.total_ask_time = 0
+        self.total_GPT_time = 0
+        self.total_vector_db_time = 0
+        self.num_runs = 0 
 
-    def num_tokens(self, text: str) -> int:
-        """Return the number of tokens in a string."""
-        encoding = tiktoken.encoding_for_model(self.model)
-        return len(encoding.encode(text))
+    def ask(self, query: str) -> str:
+        """Answers a query using GPT"""
+        start_time = time.time()
+
+        message = self.query_message(query, self.token_budget)
+        if message is None:
+            return "I could not find a direct answer."
+        if self.debug:
+            print(message)
+
+        messages = [
+            {"role": "system", "content": "You answer questions about appliances."},
+            {"role": "user", "content": message},
+        ]
+        gpt_time = time.time()
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=messages,
+            temperature=0
+        )
+        self.total_GPT_time += (time.time() - gpt_time)
+        
+        response_message = response.choices[0].message.content
+        self.previous_answers.append(response_message)
+        
+        self.total_ask_time += (time.time() - start_time)
+        self.num_runs += 1
+        return response_message
 
     def query_message(self, query: str, token_budget: int) -> str:
-        """Return a message for GPT, with relevant source texts queried from local FAISS db."""        
+        """Return a message for GPT, with relevant webpages, previous used webpages, and previous answers"""        
+        start_time = time.time()
         strings = self.query_faiss(query)
-        
+        self.total_vector_db_time += (time.time() - start_time)
+
         introduction = 'Use the below website pages from PartSelect.com, previuos PartSelect webpages you have used, and previous answers you have given to answer the subsequent question. Prioritize using new articles over previous articles. Uas previous articles and answers to have context of what the user is talking about. ALWAYS link to relevant sources. If the answer cannot be found in the articles, try and use the info provided but mention that "I could not find a direct answer."'
         question = f"\n\nQuestion: {query}"
         message = introduction
@@ -41,19 +75,24 @@ class GPTQueryGen:
         tokens_used += self.num_tokens(message + question)
         previous_answer_budget = 1024
         previous_db_output_budget = 1024
-        print(f"Number of Results: {len(strings)}")
+        if self.debug:
+            print(f"Number of Results: {len(strings)}")
         if len(strings) == 0:
             return None
         token_budget -= previous_answer_budget + previous_db_output_budget
+
+        # add documents 
         for string in strings:
             next_article = f'\n\PartSelect Webpage:\n"""\n{string}\n"""'
             message += next_article
             tokens = self.num_tokens(next_article)
             tokens_used += tokens
-            print(f"Article token length: {tokens}")
+            if self.debug:
+                print(f"Documnet token length: {tokens}")
             if (tokens_used > token_budget):
                 break
-        print(f"Tokens Used: {tokens_used}")
+        if self.debug:
+            print(f"Tokens Used: {tokens_used}")
 
         tokens_used = 0
         # use top 2 previous article from every previous query until run out of tokens or articles
@@ -68,7 +107,8 @@ class GPTQueryGen:
                 message += next_article
                 tokens = self.num_tokens(next_article)
                 tokens_used += tokens
-                print(f"Previous Article token length: {tokens}")
+                if self.debug: 
+                    print(f"Previous Document token length: {tokens}")
                 if (tokens_used > previous_db_output_budget):
                     break
 
@@ -78,34 +118,23 @@ class GPTQueryGen:
             answer = self.previous_answers[i]
             message += f'\n\Previous Answer:\n"""\n{answer}\n"""'
             tokens = self.num_tokens(answer)
-            print(f"Prev ansswer token length: {tokens}")
+            if self.debug:
+                print(f"Prev ansswer token length: {tokens}")
             tokens_used += tokens
             if (tokens_used > previous_answer_budget):
                 break
         return message + question
 
-    # load the faiss db from file
-    def load_faiss(self, db_name):
-        embeddings = None
-        if self.embeddings == "hf":
-            embeddings_model_name = "sentence-transformers/all-MiniLM-L6-v2"
-            model_kwargs = {'device': 'mps'}
-            encode_kwargs = {'batch_size': 8}
-            embeddings = HuggingFaceEmbeddings(model_name=embeddings_model_name, model_kwargs=model_kwargs, encode_kwargs=encode_kwargs)
-        elif self.embeddings == "openai":
-            embeddings = OpenAIEmbeddings(model="text-embedding-ada-002")
-        
-        db = FAISS.load_local(db_name, embeddings, allow_dangerous_deserialization=True)
-        return db 
-
     def query_faiss(self, query: str) -> list:
+        """Query the FAISS database for similar documents to users query"""
         ps_num = self.find_part_select_num(query)
         model_num = self.find_model_num(query)
         if model_num == ps_num:
              model_num = "N/A" 
 
-        print(f"Model Number: {model_num}")
-        print(f"Part Select Number: {ps_num}")
+        if self.debug:
+            print(f"Model Number: {model_num}")
+            print(f"Part Select Number: {ps_num}")
 
         docs = None
         if model_num != "N/A" and ps_num != "N/A":
@@ -132,8 +161,35 @@ class GPTQueryGen:
         self.previous_db_results.append(docs)
         return docs
     
+    ### Load Functions ###
+    def load_faiss(self, db_name):
+        """load the faiss db from file"""
+        embeddings = None
+        if self.embeddings == "hf":
+            embeddings_model_name = "sentence-transformers/all-MiniLM-L6-v2"
+            model_kwargs = {'device': 'mps'}
+            encode_kwargs = {'batch_size': 8}
+            embeddings = HuggingFaceEmbeddings(model_name=embeddings_model_name, model_kwargs=model_kwargs, encode_kwargs=encode_kwargs)
+        elif self.embeddings == "openai":
+            embeddings = OpenAIEmbeddings(model="text-embedding-ada-002")
+        
+        db = FAISS.load_local(db_name, embeddings, allow_dangerous_deserialization=True)
+        return db 
+    
+    def load_openai_client(self):
+        """Load the OpenAI client from the API key in the environment."""
+        client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+        return client
+    
+    ### Helper Functions ###  
+    def num_tokens(self, text: str) -> int:
+        """Return the number of tokens in a string."""
+        encoding = tiktoken.encoding_for_model(self.model)
+        return len(encoding.encode(text))
+    
     def find_model_num(self, title):
-        max_number_count = 3 # hard code to 3 to avoid false positives
+        """Find the model number in the title"""
+        max_number_count = 2 # hard code to 2 to avoid false positives
         part_num = "N/A"
         
         # Split the title into words and iterate over them
@@ -149,6 +205,7 @@ class GPTQueryGen:
         return part_num
     
     def find_part_select_num(self, url):
+        """Find the part select number in the URL"""
         # Regular expression to match "PS" followed by digits
         pattern = r'PS\d+'
         match = re.search(pattern, url)
@@ -156,35 +213,17 @@ class GPTQueryGen:
             return match.group(0)  # Return the matched part select number
         else:
             return "N/A"
-    
-    def ask(self,
-        query: str,
-        print_message: bool = False,    
-    ) -> str:
-        """Answers a query using GPT"""
-        message = self.query_message(query, self.token_budget)
-        if message is None:
-            return "I could not find a direct answer."
-        if print_message:
-            print(message)
 
-        messages = [
-            {"role": "system", "content": "You answer questions about appliances."},
-            {"role": "user", "content": message},
-        ]
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=messages,
-            temperature=0
-        )
-        response_message = response.choices[0].message.content
-        self.previous_answers.append(response_message)
-        return response_message
+    ### Debug Functions ###
+    def print_debug_stats(self):
+        if self.num_runs == 0:
+            print("No runs")
+            return 
+        """Print the average time for each step"""
+        print(f"\nAverage Time: {self.total_ask_time / self.num_runs}")
+        print(f"Average GPT Time: {self.total_GPT_time / self.num_runs}")
+        print(f"Average Vector DB Time: {self.total_vector_db_time / self.num_runs}")
 
-    def load_openai_client(self):
-        """Load the OpenAI client from the API key in the environment."""
-        client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
-        return client
 
 # CLI
 def main():
@@ -193,24 +232,35 @@ def main():
     parser.add_argument("--embeddings-model", type=str, help="Embeddings model to use")
     parser.add_argument("--model", type=str, help="GPT model to use", default="gpt-3.5-turbo")
     parser.add_argument("--token-budget", type=int, help="Token budget for GPT", default=4096)
+    parser.add_argument("--debug", action="store_true", help="Debug mode")
     args = parser.parse_args()
-
-    if not args.db_name:
-        print("Please provide a value for --db-name")
+    if not args.db_name or not args.embeddings_model:
+        print("Please provide a value for --db-name and --embeddings-model.")
         return
     
-    if not args.embeddings_model:
-        print("Please provide a value for --embeddings-model")
-        return
+    loop = True 
+
+    # # Define the signal handler function
+    # def signal_handler(signal, frame):
+    #     print("SIGINT received. Exiting...")
+    #     # Perform any necessary cleanup or additional actions here
+    #     nonlocal loop
+    #     loop = False
+
+    # # Register the signal handler for SIGINT
+    # signal.signal(signal.SIGINT, signal_handler)
 
     print("Loading...")
-    gpt = GPTQueryGen(model=args.model, embeddings=args.embeddings_model, token_budget=args.token_budget, db_name=args.db_name)
-    while True:
-        query = input("Enter your query: ")
-        start = time.time()
-        response = gpt.ask(query, print_message=False)
-        print(response)
-        print(f"Time: {time.time() - start}")
+    gpt = GPTQueryGen(model=args.model, embeddings=args.embeddings_model, token_budget=args.token_budget, db_name=args.db_name, debug=args.debug)
+    while loop:
+        try:
+            query = input("Enter your query: ")
+            response = gpt.ask(query)
+            print(response)
+        except KeyboardInterrupt:
+            break
+    
+    gpt.print_debug_stats()
 
 if __name__ == "__main__":
     main()
