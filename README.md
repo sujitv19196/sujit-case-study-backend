@@ -2,9 +2,9 @@
 
 Download FAISS db
 - https://drive.google.com/drive/folders/1tbn2fqJ6EmhaGxHuZrOm-YhzOINF81zX?usp=sharing
-- place /faiss folder
--   faiss/index.faiss
--   faiss/index.pkl
+- place in /faiss folder
+  - faiss/index.faiss
+  - faiss/index.pkl
   
 Running the Backend 
 - pip install -r requirements.txt
