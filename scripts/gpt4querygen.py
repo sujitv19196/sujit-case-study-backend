@@ -142,12 +142,14 @@ class GPTQueryGen:
                 filter=lambda d: d["model_num"]== model_num and d["ps_num"] == ps_num, 
                 k=25, fetch_k=60000)
         elif model_num != "N/A":
-            print("Model Number Search")
+            if self.debug:
+                print("Model Number Search")
             docs = self.db.similarity_search_with_score(query, 
                 filter=lambda d: d["model_num"]== model_num, 
                 k=25, fetch_k=60000)        
         elif ps_num != "N/A":
-            print("Part Number Search")
+            if self.debug:
+                print("Part Number Search")
             docs = self.db.similarity_search_with_score(query, 
                 filter=lambda d: d["ps_num"]== ps_num, 
                 k=25, fetch_k=60000)
