@@ -35,7 +35,7 @@ def create_app(test_config=None):
     # db = load_faiss("../faiss/faiss_index_hf_v6") # TODO make arg? 
    
     # init gpt model 
-    gpt = GPTQueryGen(model="gpt-3.5-turbo", embeddings = "hf", db_name="faiss/faiss_hf_v9_fdonly", token_budget=8192)
+    gpt = GPTQueryGen(model="gpt-3.5-turbo", embeddings = "hf", db_name="faiss/", token_budget=8192)
 
     # a simple page that says hello!
     @app.route('/hello', methods=['GET'])
