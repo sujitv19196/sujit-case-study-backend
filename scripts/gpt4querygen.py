@@ -32,7 +32,7 @@ class GPTQueryGen:
         """Return a message for GPT, with relevant source texts queried from local FAISS db."""        
         strings = self.query_faiss(query)
         
-        introduction = 'Use the below website pages from PartSelect.com and previous answers you have given to answer the subsequent question. ALWAYS link to relevant sources. If the answer cannot be found in the articles, try and use the info provided but mention that "I could not find a direct answer."'
+        introduction = 'Use the below website pages from PartSelect.com, previuos PartSelect webpages you have used, and previous answers you have given to answer the subsequent question. Prioritize using new articles over previous articles. Uas previous articles and answers to have context of what the user is talking about. ALWAYS link to relevant sources. If the answer cannot be found in the articles, try and use the info provided but mention that "I could not find a direct answer."'
         question = f"\n\nQuestion: {query}"
         message = introduction
         
@@ -44,16 +44,18 @@ class GPTQueryGen:
         print(f"Number of Results: {len(strings)}")
         if len(strings) == 0:
             return None
+        token_budget -= previous_answer_budget + previous_db_output_budget
         for string in strings:
             next_article = f'\n\PartSelect Webpage:\n"""\n{string}\n"""'
             message += next_article
             tokens = self.num_tokens(next_article)
             tokens_used += tokens
             print(f"Article token length: {tokens}")
-            if (tokens_used > token_budget-previous_answer_budget-previous_db_output_budget):
+            if (tokens_used > token_budget):
                 break
         print(f"Tokens Used: {tokens_used}")
 
+        tokens_used = 0
         # use top 2 previous article from every previous query until run out of tokens or articles
         for i in range(len(self.previous_db_results)-2, -1, -1): # iterate in reverse, skip itself 
             docs = self.previous_db_results[i]
@@ -62,22 +64,23 @@ class GPTQueryGen:
             else: 
                 continue
             for d in doc:
-                next_article = f'\n\PartSelect Webpage:\n"""\n{d}\n"""'
+                next_article = f'\n\Previuos PartSelect Webpage:\n"""\n{d}\n"""'
                 message += next_article
                 tokens = self.num_tokens(next_article)
                 tokens_used += tokens
                 print(f"Previous Article token length: {tokens}")
-                if (tokens_used > token_budget-previous_answer_budget):
+                if (tokens_used > previous_db_output_budget):
                     break
 
         # add previous GPT answers to the message
+        tokens_used = 0
         for i in range(len(self.previous_answers)-1, -1, -1): # iterate in reverse
             answer = self.previous_answers[i]
             message += f'\n\Previous Answer:\n"""\n{answer}\n"""'
             tokens = self.num_tokens(answer)
             print(f"Prev ansswer token length: {tokens}")
             tokens_used += tokens
-            if (tokens_used > token_budget):
+            if (tokens_used > previous_answer_budget):
                 break
         return message + question
 
@@ -118,9 +121,9 @@ class GPTQueryGen:
             print("Part Number Search")
             docs = self.db.similarity_search_with_score(query, 
                 filter=lambda d: d["ps_num"]== ps_num, 
-                k=20, fetch_k=60000)
+                k=25, fetch_k=60000)
         else: 
-            docs = self.db.similarity_search_with_score(query, k=20)
+            docs = self.db.similarity_search_with_score(query, k=25)
         
         # fallback for when ro results from filtered results 
         if len(docs) == 0:
