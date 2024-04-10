@@ -54,7 +54,7 @@ class GPTQueryGen:
         self.total_GPT_time += (time.time() - gpt_time)
         
         response_message = response.choices[0].message.content
-        self.previous_answers.append(response_message)
+        self.previous_answers.append(f"Question: {query}\n\nAnswer: {response_message}")
         
         self.total_ask_time += (time.time() - start_time)
         self.num_runs += 1
@@ -66,7 +66,9 @@ class GPTQueryGen:
         strings = self.query_faiss(query)
         self.total_vector_db_time += (time.time() - start_time)
 
-        introduction = 'Use the below website pages from PartSelect.com, previuos PartSelect webpages you have used, and previous answers you have given to answer the subsequent question. Prioritize using new articles over previous articles. Uas previous articles and answers to have context of what the user is talking about. ALWAYS link to relevant sources. If the answer cannot be found in the articles, try and use the info provided but mention that "I could not find a direct answer."'
+        introduction = '''Use the below PartSelect webpages, previous PartSelect webpages you have used, and previous questions/answers you have given to answer the subsequent question. 
+        Use previous articles and answers to have context of what the user is talking about. 
+        ALWAYS link to sources that you used! If the answer cannot be found in the articles, try and use the info provided but mention that "I could not find a direct answer."'''
         question = f"\n\nQuestion: {query}"
         message = introduction
         
@@ -116,13 +118,14 @@ class GPTQueryGen:
         tokens_used = 0
         for i in range(len(self.previous_answers)-1, -1, -1): # iterate in reverse
             answer = self.previous_answers[i]
-            message += f'\n\Previous Answer:\n"""\n{answer}\n"""'
+            message += f'\n\Previous Question and Answer:\n"""\n{answer}\n"""'
             tokens = self.num_tokens(answer)
             if self.debug:
                 print(f"Prev ansswer token length: {tokens}")
             tokens_used += tokens
             if (tokens_used > previous_answer_budget):
                 break
+        
         return message + question
 
     def query_faiss(self, query: str) -> list:
@@ -139,7 +142,7 @@ class GPTQueryGen:
         docs = None
         if model_num != "N/A" and ps_num != "N/A":
             docs = self.db.similarity_search_with_score(query, 
-                filter=lambda d: d["model_num"]== model_num and d["ps_num"] == ps_num, 
+                filter=lambda d: d["model_num"] == model_num and d["ps_num"] == ps_num, 
                 k=25, fetch_k=60000)
         elif model_num != "N/A":
             if self.debug:

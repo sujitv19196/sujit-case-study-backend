@@ -1,5 +1,6 @@
 import os
 import json
+import signal
 
 from flask import Flask, request
 from flask_cors import CORS, cross_origin
@@ -14,7 +15,6 @@ def create_app(test_config=None):
     CORS(app)
     app.config.from_mapping(
         SECRET_KEY='dev',
-        # DATABASE=os.path.join(app.instance_path, 'flaskr.sqlite'),
     )
     app.config["CORS_HEADERS"] = "Content-Type"
 
@@ -31,11 +31,8 @@ def create_app(test_config=None):
     except OSError:
         pass
 
-    # init vector db 
-    # db = load_faiss("../faiss/faiss_index_hf_v6") # TODO make arg? 
-   
     # init gpt model 
-    gpt = GPTQueryGen(model="gpt-3.5-turbo", embeddings = "hf", db_name="faiss/", token_budget=8192)
+    gpt = GPTQueryGen(model="gpt-3.5-turbo", embeddings = "hf", db_name="faiss/", token_budget=8192, debug=True)
 
     # a simple page that says hello!
     @app.route('/hello', methods=['GET'])
@@ -48,18 +45,8 @@ def create_app(test_config=None):
         data = request.json  # Parse JSON data
         query = data.get('query')
         if not query is None:
-            response = gpt.ask(query, print_message=False)
-            print(response)
+            response = gpt.ask(query)
+            gpt.print_debug_stats()
             return json.dumps({"message": response})
-            
+    
     return app
-
-def load_faiss(db_name):
-    embeddings = None
-    embeddings_model_name = "sentence-transformers/all-MiniLM-L6-v2"
-    model_kwargs = {'device': 'mps'}
-    encode_kwargs = {'batch_size': 8}
-    embeddings = HuggingFaceEmbeddings(model_name=embeddings_model_name, model_kwargs=model_kwargs, encode_kwargs=encode_kwargs)
-
-    db = FAISS.load_local(db_name, embeddings, allow_dangerous_deserialization=True)
-    return db 
