@@ -25,7 +25,7 @@ def create_faiss_db(db_name: str, data_file: str):
         'quotechar': '"',
         'fieldnames': ['text', 'url', 'depth', 'title', 'model_num', 'ps_num']},
         source_column='url',
-        metadata_columns=['depth', 'title', 'model_num', 'ps_num']) # TODO add metadata columns
+        metadata_columns=['depth', 'title', 'model_num', 'ps_num']) 
     documents = loader.load()
 
     print("Splitting documents...")

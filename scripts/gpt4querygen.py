@@ -1,6 +1,5 @@
 import argparse
 from langchain_community.vectorstores import FAISS
-from langchain_openai import OpenAIEmbeddings
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from openai import OpenAI 
 import tiktoken  
@@ -175,8 +174,8 @@ class GPTQueryGen:
             model_kwargs = {'device': 'mps'}
             encode_kwargs = {'batch_size': 8}
             embeddings = HuggingFaceEmbeddings(model_name=embeddings_model_name, model_kwargs=model_kwargs, encode_kwargs=encode_kwargs)
-        elif self.embeddings == "openai":
-            embeddings = OpenAIEmbeddings(model="text-embedding-ada-002")
+        # elif self.embeddings == "openai":
+        #     embeddings = OpenAIEmbeddings(model="text-embedding-ada-002")
         
         db = FAISS.load_local(db_name, embeddings, allow_dangerous_deserialization=True)
         return db 
@@ -244,16 +243,6 @@ def main():
         return
     
     loop = True 
-
-    # # Define the signal handler function
-    # def signal_handler(signal, frame):
-    #     print("SIGINT received. Exiting...")
-    #     # Perform any necessary cleanup or additional actions here
-    #     nonlocal loop
-    #     loop = False
-
-    # # Register the signal handler for SIGINT
-    # signal.signal(signal.SIGINT, signal_handler)
 
     print("Loading...")
     gpt = GPTQueryGen(model=args.model, embeddings=args.embeddings_model, token_budget=args.token_budget, db_name=args.db_name, debug=args.debug)
