@@ -29,12 +29,20 @@ class GPTQueryGen:
         self.total_GPT_time = 0
         self.total_vector_db_time = 0
         self.num_runs = 0 
+        # debug for each run
+        self.this_ask_time = 0
+        self.this_gpt_time = 0
+        self.this_vector_db_time = 0
 
     def ask(self, query: str) -> str:
         """Answers a query using GPT"""
         start_time = time.time()
 
-        message = self.query_message(query, self.token_budget)
+        introduction = '''Use the below PartSelect webpages, previous PartSelect webpages you have used, and previous questions/answers you have given to answer the subsequent question. 
+        Use previous articles and answers to have context of what the user is talking about. 
+        ALWAYS link to sources that you used! If the answer cannot be found in the articles, try and use the info provided but mention that "I could not find a direct answer."'''
+        
+        message = self.query_message(query, self.token_budget, introduction)
         if message is None:
             return "I could not find a direct answer."
         if self.debug:
@@ -50,24 +58,59 @@ class GPTQueryGen:
             messages=messages,
             temperature=0
         )
-        self.total_GPT_time += (time.time() - gpt_time)
+        self.this_gpt_time = (time.time() - gpt_time)
+        self.total_GPT_time += self.this_gpt_time
         
         response_message = response.choices[0].message.content
         self.previous_answers.append(f"Question: {query}\n\nAnswer: {response_message}")
         
-        self.total_ask_time += (time.time() - start_time)
+        self.this_ask_time = (time.time() - start_time)
+        self.total_ask_time += self.this_ask_time
         self.num_runs += 1
         return response_message
-
-    def query_message(self, query: str, token_budget: int) -> str:
-        """Return a message for GPT, with relevant webpages, previous used webpages, and previous answers"""        
+    def ask_audio(self, query: str) -> str:
+        """Answers a query using GPT with tweaks given the user is speaking to LLM"""
         start_time = time.time()
-        strings = self.query_faiss(query)
-        self.total_vector_db_time += (time.time() - start_time)
 
         introduction = '''Use the below PartSelect webpages, previous PartSelect webpages you have used, and previous questions/answers you have given to answer the subsequent question. 
         Use previous articles and answers to have context of what the user is talking about. 
-        ALWAYS link to sources that you used! If the answer cannot be found in the articles, try and use the info provided but mention that "I could not find a direct answer."'''
+        Be concise in your answer! Do not link to sources. 
+        If the answer cannot be found in the articles, try and use the info provided but mention that "I could not find a direct answer."'''
+        
+        message = self.query_message(query, self.token_budget, introduction)
+        if message is None:
+            return "I could not find a direct answer."
+        if self.debug:
+            print(message)
+
+        messages = [
+            {"role": "system", "content": "You answer questions about appliances. Pretend you are speaking the answer out loud and use a conversational tone. Skip the introduction sentence if it is repearing the question."},
+            {"role": "user", "content": message},
+        ]
+        gpt_time = time.time()
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=messages,
+            temperature=0
+        )
+        self.this_gpt_time = (time.time() - gpt_time)
+        self.total_GPT_time += self.this_gpt_time
+        
+        response_message = response.choices[0].message.content
+        self.previous_answers.append(f"Question: {query}\n\nAnswer: {response_message}")
+        
+        self.this_ask_time = (time.time() - start_time)
+        self.total_ask_time += self.this_ask_time
+        self.num_runs += 1
+        return response_message
+
+    def query_message(self, query: str, token_budget: int, introduction: str) -> str:
+        """Return a message for GPT, with relevant webpages, previous used webpages, and previous answers"""        
+        start_time = time.time()
+        strings = self.query_faiss(query)
+        self.this_vector_db_time = (time.time() - start_time)
+        self.total_vector_db_time += self.this_vector_db_time
+
         question = f"\n\nQuestion: {query}"
         message = introduction
         
@@ -219,7 +262,7 @@ class GPTQueryGen:
             return "N/A"
 
     ### Debug Functions ###
-    def print_debug_stats(self):
+    def print_average_debug_stats(self):
         if self.num_runs == 0:
             print("No runs")
             return 
@@ -228,6 +271,11 @@ class GPTQueryGen:
         print(f"Average GPT Time: {self.total_GPT_time / self.num_runs}")
         print(f"Average Vector DB Time: {self.total_vector_db_time / self.num_runs}")
 
+    def print_run_debug_stats(self):
+        """Print the time for this run"""
+        # print(f"\nTotal Time: {self.this_ask_time}")
+        print(f"GPT Time: {self.this_gpt_time}")
+        print(f"Vector DB Time: {self.this_vector_db_time}")
 
 # CLI
 def main():

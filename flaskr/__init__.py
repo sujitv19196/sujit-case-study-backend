@@ -34,6 +34,8 @@ def create_app(test_config=None):
     # init gpt model 
     gpt = GPTQueryGen(model="gpt-3.5-turbo", embeddings = "hf", db_name="faiss/", token_budget=8192, debug=True)
     stt = SpeechToTextPipeline(model_id="openai/whisper-large-v3")
+    # run a test stt to load the model
+    # stt("test.wav", "openai/whisper-large-v3", "english")
 
     # a simple page that says hello!
     @app.route('/hello', methods=['GET'])
@@ -52,6 +54,7 @@ def create_app(test_config=None):
     
     @app.route('/audio', methods=['POST'])
     def audio():
+        start_time = time.time()
         audio_file = request.files.get('audio_data')
         file_type = request.form.get("type")
         print(audio_file)
@@ -73,9 +76,11 @@ def create_app(test_config=None):
             transcript = stt(target_path, "openai/whisper-large-v3", "english")
             whisper_stt_time = time.time() - start_time
 
-            response = gpt.ask(transcript)
-            gpt.print_debug_stats()
+            response = gpt.ask_audio(transcript)
+            gpt.print_run_debug_stats()
             print("Whisper STT Time: ", whisper_stt_time)
+            print("Total Time: ", time.time() - start_time)
+            # gpt.print_average_debug_stats()
             
             return json.dumps({"message": response, 
                                "query": transcript})
