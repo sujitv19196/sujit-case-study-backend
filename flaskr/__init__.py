@@ -77,7 +77,8 @@ def create_app(test_config=None):
             gpt.print_debug_stats()
             print("Whisper STT Time: ", whisper_stt_time)
             
-            return json.dumps({"message": response})
+            return json.dumps({"message": response, 
+                               "query": transcript})
         
         except Exception as e:
             print(f"Error processing audio: {e}")
